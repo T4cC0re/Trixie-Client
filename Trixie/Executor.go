@@ -48,10 +48,10 @@ For 'srvdb.' commands use 'tsrvdb'
 For 'fix.' commands use 'tfix'
 For 'vmware.' commands use 'tvmware'
 
-Each command is also matched for '*', 'trixie-*' and '___*', where * = srvdb, etc.
+Each command is also matched for '*', 'trixie-*' and '___*', where * = srvdb, fix, vmware, etc.
 
 To execute namespaced commands with 'trixie' use 'trixie action <your command> [<params> ...]'
- - e.g. 'trixie action srvdb.search svc.trixie%.%'
+ - e.g. 'trixie do srvdb.search svc.trixie%.%'
 
 Commands you can use everywhere:
   - 'login' [opt. max. time in minutes]: Login to the Trixie-Server/refresh the current session if still valid
@@ -62,10 +62,10 @@ Examples for srvdb:
   - tsrvdb propsearch svc.trixie%.ip=10.22.33.44
 
 Examples for fix:
-  - tfix publicNetwork srv123456
+  - tfix publicnetwork srv123456
 
 Examples for vmware:
-   - tvmware createMemcache pinf600 trixie-sessions-01 12G
+   - tvmware create.memcache pinf600 trixie-sessions-01 12G
 
 More questions? Ask my master @ h.meyer@bigpoint.net!
 `)
@@ -116,11 +116,38 @@ func readPassword(prompt string) string {
 	fmt.Print(prompt)
 	pass, err := terminal.ReadPassword(int(os.Stdin.Fd()))
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "\n\nReading password failed. If you use MSYS/Cygwin/Git-Bash, please use winpty.")
+		fmt.Fprintln(os.Stderr, "\n\nReading password failed. If you use MSYS2/MINGW/Cygwin/Git-Bash, please use winpty.")
 		panic(err.Error())
 	}
 	println()
 	return string(pass)
+}
+
+func (t Executor) saveAuth(resp *http.Response) {
+	var dat map[string]interface{}
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &dat); err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("retrieved token is vaild until: %u", uint32(dat["tokenValidity"].(float64)))
+
+	token := string(dat["token"].(string))
+	validity := uint32(dat["tokenValidity"].(float64))
+
+	newConf := Config{t.Url, token, validity}
+	jsonConf, err := json.Marshal(newConf)
+	if err != nil {
+		panic(err)
+	}
+
+	err = ioutil.WriteFile(t.ConfigPath, jsonConf, 0600)
+	if err != nil {
+		panic(err)
+	}
+
+	t.Auth = token
 }
 
 func (t Executor) login() error {
@@ -140,8 +167,8 @@ func (t Executor) login() error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 {
-		fmt.Println(resp.Body)
-		//TODO Save new auth.
+		t.saveAuth(resp)
+		return nil
 	}
 
 	fmt.Print("Existing Auth-token (if existent) is expired\nEnter Username:\n")
@@ -171,36 +198,10 @@ func (t Executor) login() error {
 	}
 	defer resp.Body.Close()
 
-	var dat map[string]interface{}
-
 	if resp.StatusCode == 200 {
-		body, _ := ioutil.ReadAll(resp.Body)
-		err = json.Unmarshal(body, &dat)
-		if err != nil {
-			return err
-		}
+		t.saveAuth(resp)
+		return nil
 	} else {
 		return errors.New("login failed!")
 	}
-	/// Save auth:
-
-	fmt.Printf("Token: %s\nVaild until: %u", dat["token"], dat["tokenValidity"])
-
-	token := string(dat["token"].(string))
-	validity := uint32(dat["tokenValidity"].(float64))
-
-	newConf := Config{t.Url, token, validity}
-	jsonConf, err := json.Marshal(newConf)
-	if err != nil {
-		return err
-	}
-	fmt.Println(string(jsonConf))
-	err = ioutil.WriteFile(t.ConfigPath, jsonConf, 0600)
-	if err != nil {
-		return err
-	}
-
-	t.Auth = token
-
-	return nil
 }

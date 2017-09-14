@@ -3,7 +3,6 @@ package main
 import (
 	"os/user"
 	"fmt"
-	"log"
 	"os"
 	"encoding/json"
 	"io/ioutil"
@@ -11,6 +10,7 @@ import (
 	"./Trixie"
 	"path/filepath"
 	"strings"
+	"regexp"
 )
 
 const (
@@ -20,32 +20,33 @@ const (
 func main() {
 	usr, err := user.Current()
 	if err != nil {
-		log.Fatal("Could not get user", err)
+		panic(err)
 	}
 	var configPath = fmt.Sprintf("%s%s.Trixie.json", usr.HomeDir, string(os.PathSeparator))
 	// Create default configPath if not existent.
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		fmt.Println(".Trixie.json does not exist")
+		fmt.Fprintln(os.Stderr, ".Trixie.json does not exist. Creating a default config for you")
 		defaultConf := Trixie.Config{defaultTrixieURL, "", 0};
 		jsonConf, err := json.Marshal(defaultConf)
 		if err != nil {
-			log.Fatal("Could not create default JSON", err)
+			panic(err)
 		}
 		fmt.Println(string(jsonConf))
 		err = ioutil.WriteFile(configPath, jsonConf, 0600)
 		if err != nil {
-			log.Fatal("Could not write default configPath", err)
+			panic(err)
 		}
 	}
+
 	rawConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		log.Fatal("Could not read config", err)
+		panic(err)
 	}
 
-	var config Trixie.Config
+	config := new(Trixie.Config)
 	err = json.Unmarshal(rawConfig, &config)
 	if err != nil {
-		log.Fatal("Could not parse Config", err)
+		panic(err)
 	}
 
 	binaryName, actionPrefix := detectBinary(os.Args[0])
@@ -63,7 +64,7 @@ func main() {
 	currentTime := uint32(time.Now().Unix())
 
 	if currentTime > config.AuthTokenValidity {
-		fmt.Printf("Your auth-token is expired. Please renew with '%s refresh'\n", binaryName)
+		fmt.Fprintf(os.Stderr, "Your auth-token is expired. Please renew with '%s login'\n", binaryName)
 	}
 
 	trixie := Trixie.NewExecutor(configPath, config.TrixieURL, config.AuthToken, binaryName)
@@ -75,15 +76,19 @@ func main() {
 
 func detectBinary(p string) (string, string) {
 	strippedName := strings.Replace(filepath.Base(p), ".exe", "", -1)
-	switch strippedName {
-	case "tsrvdb", "trixie-srvdb", "srvdb", "___srvdb":
-		return strippedName, "srvdb."
-	case "tvmware", "trixie-vmware", "vmware", "___vmware":
-		return strippedName, "vmware."
-	case "tfix", "trixie-fix", "fix", "___fix":
-		return strippedName, "fix."
-	case "magic", "trixie", "___trixie":
-		return strippedName, "internal."
+	regex := regexp.MustCompile(`(?i)(t_?|trixie-|___)?(?P<namespace>[a-z]*)$`)
+	var namespace string
+	if string_ := regex.FindStringSubmatch(strippedName); len(string_) == 3 {
+		namespace = string_[2] + "."
+
+		if namespace == "trixie." {
+			namespace = "internal."
+		}
+	} else {
+		namespace = "internal."
 	}
-	return strippedName, "internal."
+
+	fmt.Fprintf(os.Stderr, "Detected %s => %s\n", strippedName, namespace)
+
+	return strippedName, namespace
 }
