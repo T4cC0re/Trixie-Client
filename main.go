@@ -66,7 +66,7 @@ func main() {
 		fmt.Printf("Your auth-token is expired. Please renew with '%s refresh'\n", binaryName)
 	}
 
-	trixie := Trixie.Executor{configPath, config.TrixieURL, config.AuthToken, binaryName}
+	trixie := Trixie.NewExecutor(configPath, config.TrixieURL, config.AuthToken, binaryName)
 
 	trixie.Execute(action, actionPrefix, params...)
 
