@@ -5,13 +5,13 @@ import (
 	"strings"
 	"os"
 	"encoding/json"
-	"log"
 	"io/ioutil"
 	"net/http"
 	"golang.org/x/crypto/ssh/terminal"
 	"bufio"
 	"errors"
 	"bytes"
+	"./Commands"
 )
 
 type Executor struct {
@@ -32,9 +32,9 @@ type RemotePayload struct {
 }
 
 type RemoteResponse struct {
-	stdout string
-	stderr string
-	error string
+	Stdout string `json:"stdout"`
+	Stderr string `json:"stderr"`
+	Error string  `json:"error"`
 }
 
 func NewExecutor(configPath string, url string, auth string, binaryName string) *Executor {
@@ -83,7 +83,7 @@ More questions? Ask my master @ h.meyer@bigpoint.net!
 }
 
 func (t Executor) Execute(action string, actionPrefix string, args ...string) {
-	action = strings.Trim(action, "\r\n ")
+	action = strings.ToLower(strings.Trim(action, "\r\n "))
 	switch action {
 	case "--help", "-h", "help":
 		t.printHelp()
@@ -91,7 +91,7 @@ func (t Executor) Execute(action string, actionPrefix string, args ...string) {
 	case "login":
 		err := t.login()
 		if err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
 		os.Exit(0)
 	default:
@@ -113,6 +113,10 @@ func (t Executor) Execute(action string, actionPrefix string, args ...string) {
 }
 func (t Executor) execInternal(action string, args ...string) int {
 	//TODO: Handle internal actions
+	switch action {
+	case "createlinks":
+		return commands.CreateLinks()
+	}
 	//CreateLinks
 	//Cleanup > delete config etc.
 	return 1
@@ -135,13 +139,11 @@ func (t Executor) execExternal(action string, args ...string) int {
 		panic(err)
 	}
 
-	fmt.Print(response)
+	fmt.Fprint(os.Stdout, response.Stdout)
+	fmt.Fprint(os.Stderr, response.Stderr)
 
-	fmt.Fprint(os.Stdout, response.stdout)
-	fmt.Fprint(os.Stderr, response.stderr)
-
-	if len(response.error) > 0 {
-		panic(response.error)
+	if len(response.Error) > 0 {
+		panic(response.Error)
 	}
 
 	if code > 399 {
@@ -169,10 +171,7 @@ func (t Executor) makeRequest(method string, endpoint string, payload RemotePayl
 		if err != nil {
 			panic(err)
 		}
-		fmt.Println(body)
 	}
-
-	fmt.Println(payload)
 
 	req, err := http.NewRequest(method, endpoint, bytes.NewBuffer(body))
 	if err != nil {
