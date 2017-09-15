@@ -11,6 +11,7 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 	"bufio"
 	"errors"
+	"bytes"
 )
 
 type Executor struct {
@@ -24,6 +25,16 @@ type Executor struct {
 type APIAuthResponse struct {
 	token         string
 	tokenValidity uint32
+}
+
+type RemotePayload struct {
+	Params []string `json:"params"`
+}
+
+type RemoteResponse struct {
+	stdout string
+	stderr string
+	error string
 }
 
 func NewExecutor(configPath string, url string, auth string, binaryName string) *Executor {
@@ -72,6 +83,7 @@ More questions? Ask my master @ h.meyer@bigpoint.net!
 }
 
 func (t Executor) Execute(action string, actionPrefix string, args ...string) {
+	action = strings.Trim(action, "\r\n ")
 	switch action {
 	case "--help", "-h", "help":
 		t.printHelp()
@@ -87,15 +99,14 @@ func (t Executor) Execute(action string, actionPrefix string, args ...string) {
 			os.Exit(t.execInternal(action, args...))
 		} else {
 			fmt.Printf(
-				"Calling '%s' with '%s' as %s: '%s%s %s'\n",
+				"Calling '%s' with as %s: '%s%s %s'\n",
 				t.Url,
-				t.Auth,
 				t.BinaryName,
 				actionPrefix,
 				action,
 				strings.Join(args, " "))
 
-			os.Exit(t.execExternal(action, args...))
+			os.Exit(t.execExternal(fmt.Sprintf("%s%s", actionPrefix, action), args...))
 		}
 	}
 
@@ -108,8 +119,35 @@ func (t Executor) execInternal(action string, args ...string) int {
 }
 
 func (t Executor) execExternal(action string, args ...string) int {
-	//TODO: Handle external actions
-	return 1
+	payload := RemotePayload{args}
+	resp, code, err := t.makeRequest(
+		"POST",
+		fmt.Sprintf("%s/action/%s", t.Url, action),
+		payload,
+		true)
+	if err != nil {
+		panic(err)
+	}
+
+	var response RemoteResponse
+	bResp := []byte(resp)
+	if err := json.Unmarshal(bResp, &response); err != nil {
+		panic(err)
+	}
+
+	fmt.Print(response)
+
+	fmt.Fprint(os.Stdout, response.stdout)
+	fmt.Fprint(os.Stderr, response.stderr)
+
+	if len(response.error) > 0 {
+		panic(response.error)
+	}
+
+	if code > 399 {
+		return 1
+	}
+	return 0
 }
 
 func readPassword(prompt string) string {
@@ -121,6 +159,46 @@ func readPassword(prompt string) string {
 	}
 	println()
 	return string(pass)
+}
+
+func (t Executor) makeRequest(method string, endpoint string, payload RemotePayload, includeAuth bool) (string, uint16, error) {
+	var body []byte
+	var err error
+	if method == "POST" {
+		body, err = json.Marshal(&payload)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(body)
+	}
+
+	fmt.Println(payload)
+
+	req, err := http.NewRequest(method, endpoint, bytes.NewBuffer(body))
+	if err != nil {
+		return "", 0, err
+	}
+
+	if includeAuth {
+		req.Header.Add("X-Trixie-Auth", t.Auth)
+	}
+	if method == "POST" {
+		req.Header.Set("Content-Type", "application/json")
+
+	}
+	resp, err := t.Client.Do(req)
+	if err != nil {
+		return "" ,0, err
+	}
+
+	defer resp.Body.Close()
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+
+	return string(body), uint16(resp.StatusCode), nil
 }
 
 func (t Executor) saveAuth(resp *http.Response) {
@@ -151,7 +229,6 @@ func (t Executor) saveAuth(resp *http.Response) {
 }
 
 func (t Executor) login() error {
-	//TODO: Actual login
 	// First check renewal. If fails, use username and password (prompt user)
 
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/auth", t.Url), nil)
