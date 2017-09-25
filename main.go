@@ -81,7 +81,7 @@ func detectBinary(p string) (string, string) {
 	if string_ := regex.FindStringSubmatch(strippedName); len(string_) == 3 {
 		namespace = string_[2] + "."
 
-		if namespace == "trixie." {
+		if namespace == "trixie." || namespace == "rixie." {
 			namespace = "internal."
 		}
 	} else {

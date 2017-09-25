@@ -61,7 +61,7 @@ For 'vmware.' commands use 'tvmware'
 
 Each command is also matched for '*', 'trixie-*' and '___*', where * = srvdb, fix, vmware, etc.
 
-To execute namespaced commands with 'trixie' use 'trixie action <your command> [<params> ...]'
+To execute namespaced commands with 'trixie' use 'trixie [do|action] <your command> [<params> ...]'
  - e.g. 'trixie do srvdb.search svc.trixie%.%'
 
 Commands you can use everywhere:
@@ -98,27 +98,26 @@ func (t Executor) Execute(action string, actionPrefix string, args ...string) {
 		if actionPrefix == "internal." {
 			os.Exit(t.execInternal(action, args...))
 		} else {
-			fmt.Printf(
+			fmt.Fprintf(
+				os.Stderr,
 				"Calling '%s' with as %s: '%s%s %s'\n",
 				t.Url,
 				t.BinaryName,
 				actionPrefix,
 				action,
 				strings.Join(args, " "))
-
 			os.Exit(t.execExternal(fmt.Sprintf("%s%s", actionPrefix, action), args...))
 		}
 	}
 
 }
 func (t Executor) execInternal(action string, args ...string) int {
-	//TODO: Handle internal actions
 	switch action {
 	case "createlinks":
 		return commands.CreateLinks()
+	case "do", "action":
+		 return t.execExternal(args[0], args[1:]...)
 	}
-	//CreateLinks
-	//Cleanup > delete config etc.
 	return 1
 }
 
@@ -139,16 +138,23 @@ func (t Executor) execExternal(action string, args ...string) int {
 		panic(err)
 	}
 
+	if len(response.Stdout) > 0 {
 	fmt.Fprint(os.Stdout, response.Stdout)
+	}
+	if len(response.Stderr) > 0 {
 	fmt.Fprint(os.Stderr, response.Stderr)
-
+	}
 	if len(response.Error) > 0 {
-		panic(response.Error)
+		fmt.Fprintf(
+			os.Stderr,
+			"Error:\n%s\n\n Your token may be expired/blacklisted or your command was invalid",
+			response.Error)
 	}
 
 	if code > 399 {
 		return 1
 	}
+
 	return 0
 }
 
@@ -175,6 +181,7 @@ func (t Executor) makeRequest(method string, endpoint string, payload RemotePayl
 
 	req, err := http.NewRequest(method, endpoint, bytes.NewBuffer(body))
 	if err != nil {
+		fmt.Println(err.Error())
 		return "", 0, err
 	}
 
