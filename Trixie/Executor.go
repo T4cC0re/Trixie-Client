@@ -115,6 +115,35 @@ func (t Executor) execInternal(action string, args ...string) int {
 	switch action {
 	case "createlinks":
 		return commands.CreateLinks()
+	case "showvm":
+		_args := []string{"vm.console", args[0]}
+		payload := RemotePayload{_args}
+		fmt.Println(payload)
+		resp, code, err := t.makeRequest("POST", "/action/govc", payload, true)
+		if err != nil {
+			panic(err.Error())
+		}
+
+		var response RemoteResponse
+		bResp := []byte(resp)
+		if err := json.Unmarshal(bResp, &response); err != nil {
+			panic(err)
+		}
+
+		if code > 399 {
+			if len(response.Stdout) > 0 {
+			fmt.Fprint(os.Stdout, response.Stdout)
+			}
+			if len(response.Stderr) > 0 {
+			fmt.Fprint(os.Stderr, response.Stderr)
+			}
+		}
+
+		if len(response.Stdout) == 0 {
+			panic("GOVC could not create a VMRC link.")
+		}
+		fmt.Println(response.Stdout)
+		return commands.Open(response.Stdout)
 	case "do", "action":
 		 return t.execExternal(args[0], args[1:]...)
 	}
@@ -125,7 +154,7 @@ func (t Executor) execExternal(action string, args ...string) int {
 	payload := RemotePayload{args}
 	resp, code, err := t.makeRequest(
 		"POST",
-		fmt.Sprintf("%s/action/%s", t.Url, action),
+		fmt.Sprintf("/action/%s", action),
 		payload,
 		true)
 	if err != nil {
@@ -179,19 +208,23 @@ func (t Executor) makeRequest(method string, endpoint string, payload RemotePayl
 		}
 	}
 
+	endpoint = fmt.Sprintf("%s%s", t.Url, endpoint)
+
 	req, err := http.NewRequest(method, endpoint, bytes.NewBuffer(body))
 	if err != nil {
 		fmt.Println(err.Error())
 		return "", 0, err
 	}
 
+	req.Header.Set("Connection", "close")
+
 	if includeAuth {
-		req.Header.Add("X-Trixie-Auth", t.Auth)
+		req.Header.Set("X-Trixie-Auth", t.Auth)
 	}
 	if method == "POST" {
 		req.Header.Set("Content-Type", "application/json")
-
 	}
+
 	resp, err := t.Client.Do(req)
 	if err != nil {
 		return "" ,0, err
