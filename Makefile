@@ -1,27 +1,30 @@
-.PHONY: all
+.PHONY: all win mac linux clean
 
-all: windows mac linux
+all: clean win mac linux
 
-windows:
+clean:
+	rm -rf linux/ mac/ win/
+
+win: clean
 	mkdir -p win
 	GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o win/trixie.exe
-	GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o win/trixie-srvcfg.exe
-	GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o win/trixie-srvdb.exe
-	GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o win/trixie-vmware.exe
-	GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o win/trixie-fix.exe
+	GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o win/tsrvcfg.exe
+	GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o win/tsrvdb.exe
+	GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o win/tvmware.exe
+	GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o win/tfix.exe
 
-mac:
+mac: clean
 	mkdir -p mac
 	GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o mac/trixie
-	GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o mac/trixie-srvcfg
-	GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o mac/trixie-srvdb
-	GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o mac/trixie-vmware
-	GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o mac/trixie-fix
+	GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o mac/tsrvcfg
+	GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o mac/tsrvdb
+	GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o mac/tvmware
+	GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o mac/tfix
 
-linux:
+linux: clean
 	mkdir -p linux
 	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o linux/trixie
-	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o linux/trixie-srvcfg
-	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o linux/trixie-srvdb
-	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o linux/trixie-vmware
-	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o linux/trixie-fix
+	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o linux/tsrvcfg
+	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o linux/tsrvdb
+	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o linux/tvmware
+	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o linux/tfix

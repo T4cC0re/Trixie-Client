@@ -10,16 +10,17 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 	"bufio"
 	"errors"
-	"bytes"
 	"./Commands"
+	"flag"
 )
 
 type Executor struct {
-	ConfigPath string
-	Url        string
-	Auth       string
-	BinaryName string
-	Client     *http.Client
+	ConfigPath    string
+	Url           string
+	Auth          string
+	BinaryName    string
+	HTTP          Http
+	UseWebSockets bool
 }
 
 type APIAuthResponse struct {
@@ -31,10 +32,16 @@ type RemotePayload struct {
 	Params []string `json:"params"`
 }
 
+type OutLine struct {
+	Fd  uint8  `json:"fd"`
+	Log string `json:"log"`
+}
+
 type RemoteResponse struct {
-	Stdout string `json:"stdout"`
-	Stderr string `json:"stderr"`
-	Error string  `json:"error"`
+	Stdout string    `json:"stdout"`
+	Stderr string    `json:"stderr"`
+	Output []OutLine `json:"output"`
+	Error  string    `json:"error"`
 }
 
 func NewExecutor(configPath string, url string, auth string, binaryName string) *Executor {
@@ -43,12 +50,47 @@ func NewExecutor(configPath string, url string, auth string, binaryName string) 
 	executor.Url = url
 	executor.Auth = auth
 	executor.BinaryName = binaryName
-	executor.Client = &http.Client{}
+	executor.HTTP = *NewHTTP(url, auth)
+	ws := flag.Bool("ws", false, "Use WebSocket Connection")
+	flag.Parse()
+	executor.UseWebSockets = *ws
 	return executor
 }
 
 func (t Executor) printHelp() {
-	fmt.Print(
+	fmt.Print("                                       [35m___...----..                \n" +
+		"                                 [35m..''``         [94mx  [35m`.              \n" +
+		"                                [35m/   [94m*       [96mx        [35m`.            \n" +
+		"                               [35m|   \\_\\_\\         [97m.  [96mX  [35m\\           \n" +
+		"                               [35m:  .'    '.  [94m*   [97m`X'     [35m|          \n" +
+		"                               [35ml /       '.     [97m' `     [35m.          \n" +
+		"                                [35mV         |   [96m*     .   [35m|          \n" +
+		"                                          [35m|        [96m`X'  [35m|.         \n" +
+		"                                     [35m_..--j   [94mX    [96m' `  [35m` `''--... \n" +
+		"                                   [35m<'__  [96m*           [97mx      *    [35m.>\n" +
+		"                                      [96m/[35m`[94m\\[35m'''----____      ___..''  \n" +
+		"                                     [96m(   [94m\\_  [37m(   [35m/[90m.-[35m`[37m|[35m'[37m|[35m`'[37m| [96m.'   | \n" +
+		"                                     [96m(     \\[37m,'\\ [35m([90m(WW [37m| \\[90mW[35m)[37mj [96m|   / .\n" +
+		"          [96m..---'''''---              (      |  [37m\\_[35m\\[37m_ /   [94m``-.[96m:  :_/|\n" +
+		"        [96m,'             `'.           (      |          [94m\\__/  [96m`---' \n" +
+		"       [96m/   _              '.          \\     '. [94m-,______.-'         \n" +
+		"      [96m| .-'/                :[94m__________[96m`.    |    [94m/                \n" +
+		"      [96m'`  -          .-''>-'             \\   '.  [94m(                 \n" +
+		"          [96m|         /   [94m/  [96m. [97m.            [96m'.  '.  [94m\\                \n" +
+		"          [96m|         |  [94m|  [96m/|[97m`X'        [96m':-._)  |   [94m|               \n" +
+		"         [96m.'         |  [94m| [96m( :[97m'[37m|[97m`          [96m`-___.'   [94m|               \n" +
+		"         [96m|          |  [94m|  [96m\\ `[37m|[96m>                    [94m|               \n" +
+		"         [96m|          | [94m/ \\  [96m``[37m'   [94m/             \\__/                \n" +
+		"         [96m'.        .'[94m'   |      /-,_______\\       \\                \n" +
+		"          [96m|        |   [94m_/      /     |    |\\       \\               \n" +
+		"          [96m|        |  [94m/       /     |     | `--,    \\              \n" +
+		"         [96m.'       :   [94m|      |      |     |   /      )             \n" +
+		"   [96m.__..'    ,   :[94m\\__/|      |      |      | (       |             \n" +
+		"    [96m`-.___.-`;  /     [94m|      |      |      |  \\      |             \n" +
+		"           [96m.:_-'      [94m|       \\     |       \\  `.___/              \n" +
+		"                       [94m\\_______)     \\_______)                     \n" +
+		"[96m\n" +
+		"\n\n" +
 		`the great and powerful Trixie! (v` + version + `)
 ... is here to help :)
 
@@ -94,23 +136,50 @@ func (t Executor) Execute(action string, actionPrefix string, args ...string) {
 			panic(err)
 		}
 		os.Exit(0)
+	case "showvm":
+		os.Exit(t.execInternal(action, args...))
 	default:
 		if actionPrefix == "internal." {
 			os.Exit(t.execInternal(action, args...))
 		} else {
-			fmt.Fprintf(
-				os.Stderr,
-				"Calling '%s' with as %s: '%s%s %s'\n",
-				t.Url,
-				t.BinaryName,
-				actionPrefix,
-				action,
-				strings.Join(args, " "))
 			os.Exit(t.execExternal(fmt.Sprintf("%s%s", actionPrefix, action), args...))
 		}
 	}
 
 }
+
+func printOutput(output *[]OutLine) {
+	for _, line := range *output {
+		printOutLine(&line)
+	}
+}
+
+func printWSOutLine(line *WSMsg) {
+	switch line.Fd {
+	case 1:
+		fmt.Fprint(os.Stdout, line.Log)
+		break
+	case 2:
+		fmt.Fprint(os.Stderr, line.Log)
+		break
+	default:
+		break
+	}
+}
+
+func printOutLine(line *OutLine) {
+	switch line.Fd {
+	case 1:
+		fmt.Fprint(os.Stdout, line.Log)
+		break
+	case 2:
+		fmt.Fprint(os.Stderr, line.Log)
+		break
+	default:
+		break
+	}
+}
+
 func (t Executor) execInternal(action string, args ...string) int {
 	switch action {
 	case "createlinks":
@@ -118,8 +187,7 @@ func (t Executor) execInternal(action string, args ...string) int {
 	case "showvm":
 		_args := []string{"vm.console", args[0]}
 		payload := RemotePayload{_args}
-		fmt.Println(payload)
-		resp, code, err := t.makeRequest("POST", "/action/govc", payload, true)
+		resp, code, err := t.HTTP.makeRequest("POST", "/action/vmware.govc", payload, true)
 		if err != nil {
 			panic(err.Error())
 		}
@@ -131,60 +199,26 @@ func (t Executor) execInternal(action string, args ...string) int {
 		}
 
 		if code > 399 {
-			if len(response.Stdout) > 0 {
-			fmt.Fprint(os.Stdout, response.Stdout)
-			}
-			if len(response.Stderr) > 0 {
-			fmt.Fprint(os.Stderr, response.Stderr)
-			}
+			printOutput(&response.Output)
 		}
 
-		if len(response.Stdout) == 0 {
-			panic("GOVC could not create a VMRC link.")
+		if len(response.Output[0].Log) == 0 {
+			panic("Did not receive a VMRC link. Does the VM exist?")
 		}
-		fmt.Println(response.Stdout)
-		return commands.Open(response.Stdout)
+
+		return commands.Open(response.Output[0].Log)
 	case "do", "action":
-		 return t.execExternal(args[0], args[1:]...)
+		return t.execExternal(args[0], args[1:]...)
 	}
 	return 1
 }
 
 func (t Executor) execExternal(action string, args ...string) int {
-	payload := RemotePayload{args}
-	resp, code, err := t.makeRequest(
-		"POST",
-		fmt.Sprintf("/action/%s", action),
-		payload,
-		true)
-	if err != nil {
-		panic(err)
-	}
-
-	var response RemoteResponse
-	bResp := []byte(resp)
-	if err := json.Unmarshal(bResp, &response); err != nil {
-		panic(err)
-	}
-
-	if len(response.Stdout) > 0 {
-	fmt.Fprint(os.Stdout, response.Stdout)
-	}
-	if len(response.Stderr) > 0 {
-	fmt.Fprint(os.Stderr, response.Stderr)
-	}
-	if len(response.Error) > 0 {
-		fmt.Fprintf(
-			os.Stderr,
-			"Error:\n%s\n\n Your token may be expired/blacklisted or your command was invalid",
-			response.Error)
-	}
-
-	if code > 399 {
-		return 1
-	}
-
-	return 0
+	//if t.UseWebSockets {
+	ws := NewWebSocket(t.Url)
+	return execWebSocket(ws, t.Auth, action, args...)
+	//}
+	//return  execHTTP(&t.HTTP, action, args...)
 }
 
 func readPassword(prompt string) string {
@@ -196,48 +230,6 @@ func readPassword(prompt string) string {
 	}
 	println()
 	return string(pass)
-}
-
-func (t Executor) makeRequest(method string, endpoint string, payload RemotePayload, includeAuth bool) (string, uint16, error) {
-	var body []byte
-	var err error
-	if method == "POST" {
-		body, err = json.Marshal(&payload)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	endpoint = fmt.Sprintf("%s%s", t.Url, endpoint)
-
-	req, err := http.NewRequest(method, endpoint, bytes.NewBuffer(body))
-	if err != nil {
-		fmt.Println(err.Error())
-		return "", 0, err
-	}
-
-	req.Header.Set("Connection", "close")
-
-	if includeAuth {
-		req.Header.Set("X-Trixie-Auth", t.Auth)
-	}
-	if method == "POST" {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	resp, err := t.Client.Do(req)
-	if err != nil {
-		return "" ,0, err
-	}
-
-	defer resp.Body.Close()
-
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
-
-	return string(body), uint16(resp.StatusCode), nil
 }
 
 func (t Executor) saveAuth(resp *http.Response) {
@@ -276,7 +268,7 @@ func (t Executor) login() error {
 	}
 
 	req.Header.Add("X-Trixie-Auth", t.Auth)
-	resp, err := t.Client.Do(req)
+	resp, err := t.HTTP.Client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -308,7 +300,7 @@ func (t Executor) login() error {
 
 	req.SetBasicAuth(username, password)
 
-	resp, err = t.Client.Do(req)
+	resp, err = t.HTTP.Client.Do(req)
 	if err != nil {
 		return err
 	}

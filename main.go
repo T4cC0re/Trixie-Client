@@ -22,7 +22,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	var configPath = fmt.Sprintf("%s%s.Trixie.json", usr.HomeDir, string(os.PathSeparator))
+	configPath := fmt.Sprintf("%s%s.Trixie.json", usr.HomeDir, string(os.PathSeparator))
+
 	// Create default configPath if not existent.
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		fmt.Fprintln(os.Stderr, ".Trixie.json does not exist. Creating a default config for you")
@@ -88,7 +89,8 @@ func detectBinary(p string) (string, string) {
 		namespace = "internal."
 	}
 
-	fmt.Fprintf(os.Stderr, "Detected %s => %s\n", strippedName, namespace)
+	// Enable for debugging:
+	//fmt.Fprintf(os.Stderr, "Detected %s => %s\n", strippedName, namespace)
 
 	return strippedName, namespace
 }
