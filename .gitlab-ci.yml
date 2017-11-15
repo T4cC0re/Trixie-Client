@@ -25,6 +25,8 @@ compile:
      - docker
     script:
       - cd $CI_PROJECT_DIR
+      - go get golang.org/x/crypto/ssh/terminal
+      - go get github.com/gorilla/websocket
       - echo -e "package Trixie\n\nconst version = \"${CI_COMMIT_REF_NAME}-${CI_COMMIT_SHA}\"" > Trixie/Version.go
       - make
     artifacts:
