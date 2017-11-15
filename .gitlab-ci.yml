@@ -21,6 +21,8 @@ stages:
 
 compile:
     stage: build
+    tags:
+     - docker
     script:
       - cd $CI_PROJECT_DIR
       - echo -e "package Trixie\n\nconst version = \"${CI_COMMIT_REF_NAME}-${CI_COMMIT_SHA}\"" > Trixie/Version.go
