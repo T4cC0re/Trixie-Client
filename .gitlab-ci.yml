@@ -1,0 +1,32 @@
+# This file is a template, and might need editing before it works on your project.
+image: golang:latest
+
+variables:
+  # Please edit to your GitLab project
+  REPO_NAME: gitlab.bigpoint.net/Trixie/client
+
+# The problem is that to be able to use go get, one needs to put
+# the repository in the $GOPATH. So for example if your gitlab domain
+# is gitlab.com, and that your repository is namespace/project, and
+# the default GOPATH being /go, then you'd need to have your
+# repository in /go/src/gitlab.com/namespace/project
+# Thus, making a symbolic link corrects this.
+before_script:
+  - mkdir -p $GOPATH/src/$REPO_NAME
+  - ln -svf $CI_PROJECT_DIR/* $GOPATH/src/$REPO_NAME
+  - cd $GOPATH/src/$REPO_NAME
+
+stages:
+    - build
+
+compile:
+    stage: build
+    script:
+      - cd $CI_PROJECT_DIR
+      - echo -e "package Trixie\n\nconst version = \"${CI_COMMIT_REF_NAME}-${CI_COMMIT_SHA}\"" > Trixie/Version.go
+      - make
+    artifacts:
+      paths:
+        - win
+        - mac
+        - linux
