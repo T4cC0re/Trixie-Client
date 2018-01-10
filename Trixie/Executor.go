@@ -11,7 +11,6 @@ import (
 	"bufio"
 	"errors"
 	"./Commands"
-	"flag"
 )
 
 type Executor struct {
@@ -20,7 +19,6 @@ type Executor struct {
 	Auth          string
 	BinaryName    string
 	HTTP          Http
-	UseWebSockets bool
 }
 
 type APIAuthResponse struct {
@@ -51,9 +49,6 @@ func NewExecutor(configPath string, url string, auth string, binaryName string) 
 	executor.Auth = auth
 	executor.BinaryName = binaryName
 	executor.HTTP = *NewHTTP(url, auth)
-	ws := flag.Bool("ws", false, "Use WebSocket Connection")
-	flag.Parse()
-	executor.UseWebSockets = *ws
 	return executor
 }
 
@@ -182,31 +177,34 @@ func printOutLine(line *OutLine) {
 
 func (t Executor) execInternal(action string, args ...string) int {
 	switch action {
-	case "createlinks":
-		return commands.CreateLinks()
+	case "createlink":
+		return commands.CreateLink(args)
 	case "showvm":
-		_args := []string{"vm.console", args[0]}
-		payload := RemotePayload{_args}
-		resp, code, err := t.HTTP.makeRequest("POST", "/action/vmware.govc", payload, true)
-		if err != nil {
-			panic(err.Error())
-		}
+		for _, vm := range args {
+			_args := []string{"vm.console", vm}
+			payload := RemotePayload{_args}
+			resp, code, err := t.HTTP.makeRequest("POST", "/action/vmware.govc", payload, true)
+			if err != nil {
+				panic(err.Error())
+			}
 
-		var response RemoteResponse
-		bResp := []byte(resp)
-		if err := json.Unmarshal(bResp, &response); err != nil {
-			panic(err)
-		}
+			var response RemoteResponse
+			bResp := []byte(resp)
+			if err := json.Unmarshal(bResp, &response); err != nil {
+				panic(err)
+			}
 
-		if code > 399 {
-			printOutput(&response.Output)
-		}
+			if code > 399 {
+				printOutput(&response.Output)
+			}
 
-		if len(response.Output[0].Log) == 0 {
-			panic("Did not receive a VMRC link. Does the VM exist?")
-		}
+			if len(response.Output[0].Log) == 0 {
+				panic("Did not receive a VMRC link. Does the VM exist?")
+			}
 
-		return commands.Open(response.Output[0].Log)
+			commands.Open(response.Output[0].Log)
+		}
+		return 0
 	case "do", "action":
 		return t.execExternal(args[0], args[1:]...)
 	}
@@ -214,11 +212,8 @@ func (t Executor) execInternal(action string, args ...string) int {
 }
 
 func (t Executor) execExternal(action string, args ...string) int {
-	//if t.UseWebSockets {
 	ws := NewWebSocket(t.Url)
 	return execWebSocket(ws, t.Auth, action, args...)
-	//}
-	//return  execHTTP(&t.HTTP, action, args...)
 }
 
 func readPassword(prompt string) string {
@@ -240,7 +235,7 @@ func (t Executor) saveAuth(resp *http.Response) {
 		panic(err)
 	}
 
-	fmt.Printf("retrieved token is vaild until: %u", uint32(dat["tokenValidity"].(float64)))
+	fmt.Printf("retrieved token is vaild until: %d", uint32(dat["tokenValidity"].(float64)))
 
 	token := string(dat["token"].(string))
 	validity := uint32(dat["tokenValidity"].(float64))

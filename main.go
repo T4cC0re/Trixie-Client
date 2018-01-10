@@ -89,8 +89,5 @@ func detectBinary(p string) (string, string) {
 		namespace = "internal."
 	}
 
-	// Enable for debugging:
-	//fmt.Fprintf(os.Stderr, "Detected %s => %s\n", strippedName, namespace)
-
 	return strippedName, namespace
 }

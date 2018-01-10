@@ -48,8 +48,6 @@ func NewWebSocket(addr string) *WebSocket {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 	url := strings.Replace(addr, "http", "ws", 1)
-	//u := url.URL{Scheme: "ws", Host: strings.Replace("http"), Path: "/action/test"}
-	log.Printf("connecting to %s", url)
 
 	socket, _, err := websocket.DefaultDialer.Dial(url, nil)
 	ws.Socket = socket
@@ -133,11 +131,11 @@ func (t *WebSocket) makeRequest(endpoint string, payload RemotePayload, auth str
 		panic(err)
 	}
 	t.Socket.WriteMessage(websocket.TextMessage, authPayload)
-	
+
 	for {
 		if t.Authenticated || t.Finished || !t.Open {
 			break
-		} 
+		}
 	}
 
 	commandPayload, err := json.Marshal(WSDo{endpoint, payload.Params})

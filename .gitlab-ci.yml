@@ -1,8 +1,6 @@
-# This file is a template, and might need editing before it works on your project.
 image: golang:latest
 
 variables:
-  # Please edit to your GitLab project
   REPO_NAME: gitlab.bigpoint.net/Trixie/client
 
 # The problem is that to be able to use go get, one needs to put
@@ -27,6 +25,7 @@ compile:
       - cd $CI_PROJECT_DIR
       - go get golang.org/x/crypto/ssh/terminal
       - go get github.com/gorilla/websocket
+      - go get github.com/docker/docker/pkg/fileutils
       - echo -e "package Trixie\n\nconst version = \"${CI_COMMIT_REF_NAME}-${CI_COMMIT_SHA}\"" > Trixie/Version.go
       - make
     artifacts:

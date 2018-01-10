@@ -7,9 +7,10 @@ import (
 	"regexp"
 	"strings"
 	"runtime"
+	"github.com/docker/docker/pkg/fileutils"
 )
 
-func CreateLinks () int {
+func CreateLink (namespaces []string) int {
 	currentPath := os.Args[0]
     strippedName := filepath.Base(strings.Replace(currentPath, ".exe", "", -1))
     baseDir := filepath.Dir(currentPath)
@@ -30,10 +31,9 @@ func CreateLinks () int {
 	linker := Linker{currentPath, baseDir, linkPrefix, extension}
 
 	errors := 0
-	errors += linker.link("srvdb")
-	errors += linker.link("srvcfg")
-	errors += linker.link("fix")
-	errors += linker.link("vmware")
+	for _, namespace := range namespaces {
+		errors += linker.link(namespace, runtime.GOOS == "windows")
+	}
 
 	return errors
 }
@@ -45,11 +45,18 @@ type Linker struct {
 	Extension string
 }
 
-func (t Linker) link(binaryName string) int {
-	if err := os.Symlink(t.CurrentPath, fmt.Sprintf("%s/%s%s%s", t.BaseDir, t.LinkPrefix, binaryName, t.Extension)); err != nil {
+func (t Linker) link(binaryName string, copy bool) int {
+	target := fmt.Sprintf("%s/%s%s%s", t.BaseDir, t.LinkPrefix, binaryName, t.Extension)
+	if copy {
+		if _, err := fileutils.CopyFile(t.CurrentPath, target); err != nil {
+			return 1
+		}
+		return 0
+	}
+
+	if err := os.Symlink(t.CurrentPath, target); err != nil {
 		fmt.Fprintf(os.Stderr, "Could not create %s link (%s)", binaryName, err.Error())
 		return 1
 	}
-
 	return 0
 }
