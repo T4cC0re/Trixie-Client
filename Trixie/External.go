@@ -1,57 +1,16 @@
 package Trixie
 
 import (
-	"fmt"
-	"encoding/json"
-	"os"
+	"./Tracer"
 	"time"
 )
 
-func execHTTP(http *Http, action string, args ...string) int {
-	payload := RemotePayload{args}
-	resp, code, err := http.makeRequest(
-		"POST",
-		fmt.Sprintf("/action/%s", action),
-		payload,
-		true)
-	if err != nil {
-		panic(err)
-	}
-
-	var response RemoteResponse
-	bResp := []byte(resp)
-	if err := json.Unmarshal(bResp, &response); err != nil {
-		panic(err)
-	}
-
-	printOutput(&response.Output)
-
-	if len(response.Error) > 0 {
-		fmt.Fprintf(
-			os.Stderr,
-			"Error:\n%s\n\n Your token may be expired/blacklisted or your command was invalid",
-			response.Error)
-	}
-
-	if code > 399 {
-		return 1
-	}
-
-	return 0
-}
-
-func execWebSocket(ws *WebSocket, auth string, action string, args ...string) int {
-	if ! ws.Open{
-		ws = NewWebSocket(ws.Addr)
-	}
-
+func execWebSocket(url string, auth string, action string, args ...string) (int, error) {
+	defer Tracer.Un(Tracer.Track("execWebSocket"))
+	ws, err := NewWebSocket(url, false)
 	payload := RemotePayload{args}
 	time.Sleep(10)
-	code, err := ws.makeRequest(action,  payload, auth)
-	if err != nil {
-		panic(err)
-	}
+	code, err := ws.makeRequest(action, payload, auth)
 
-	return int(code)
+	return int(code), err
 }
-//

@@ -1,23 +1,24 @@
 package commands
 
 import (
+	"../Tracer"
+	"fmt"
+	"github.com/docker/docker/pkg/fileutils"
 	"os"
 	"path/filepath"
-	"fmt"
 	"regexp"
-	"strings"
 	"runtime"
-	"github.com/docker/docker/pkg/fileutils"
+	"strings"
 )
 
-func CreateLink (namespaces []string) int {
+func CreateLink(namespaces []string) (int, error) {
 	currentPath := os.Args[0]
-    strippedName := filepath.Base(strings.Replace(currentPath, ".exe", "", -1))
-    baseDir := filepath.Dir(currentPath)
-    extension := ""
+	strippedName := filepath.Base(strings.Replace(currentPath, ".exe", "", -1))
+	baseDir := filepath.Dir(currentPath)
+	extension := ""
 
-    if runtime.GOOS == "windows" {
-    	extension = ".exe"
+	if runtime.GOOS == "windows" {
+		extension = ".exe"
 	}
 
 	regex := regexp.MustCompile(`(?i)(t_?|trixie-|___)?(?P<namespace>[a-z]*)$`)
@@ -25,7 +26,7 @@ func CreateLink (namespaces []string) int {
 	if string_ := regex.FindStringSubmatch(strippedName); len(string_) == 3 {
 		linkPrefix = string_[1]
 	} else {
-		panic("Unknown prefix used. Not creating links")
+		Tracer.Log("Unknown prefix used. Not creating links")
 	}
 
 	linker := Linker{currentPath, baseDir, linkPrefix, extension}
@@ -35,14 +36,14 @@ func CreateLink (namespaces []string) int {
 		errors += linker.link(namespace, runtime.GOOS == "windows")
 	}
 
-	return errors
+	return errors, nil
 }
 
 type Linker struct {
 	CurrentPath string
-	BaseDir string
-	LinkPrefix string
-	Extension string
+	BaseDir     string
+	LinkPrefix  string
+	Extension   string
 }
 
 func (t Linker) link(binaryName string, copy bool) int {

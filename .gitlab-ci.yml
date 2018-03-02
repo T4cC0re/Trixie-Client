@@ -26,7 +26,7 @@ compile:
       - go get golang.org/x/crypto/ssh/terminal
       - go get github.com/gorilla/websocket
       - go get github.com/docker/docker/pkg/fileutils
-      - echo -e "package Trixie\n\nconst version = \"${CI_COMMIT_REF_NAME}-${CI_COMMIT_SHA}\"" > Trixie/Version.go
+      - echo -e "package Trixie\n\nconst version = \"${CI_COMMIT_TAG:-0.0.0}-${CI_COMMIT_SHA:0:8}\"" > Trixie/Version.go
       - make
     artifacts:
       paths:

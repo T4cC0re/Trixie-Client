@@ -5,3 +5,7 @@ type Config struct {
 	AuthToken         string
 	AuthTokenValidity uint32
 }
+
+const (
+	DefaultURL = "https://trixie.bigpoint.net"
+)
